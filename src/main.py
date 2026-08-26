@@ -13,7 +13,7 @@ import httpx
 import uvicorn
 from fastmcp import FastMCP
 
-from apify import Actor
+from apify import Actor, Event
 
 BULK_ACTOR_URL = 'apify.com/cold_email_master/bulk-email-verifier-validator'
 
@@ -29,12 +29,16 @@ VALIDATE_ENDPOINT = f'{VERIMAILX_BASE}/validate'
 # a list by calling the synchronous single-address endpoint concurrently and
 # points callers at the bulk Actor once the list gets large.
 LIST_MAX = 25
-LIST_CONCURRENCY = 8
+LIST_CONCURRENCY = 10
 
 # Pay-per-event charge, fired once per address that reaches a real verdict.
 CHARGE_EVENT = 'email-verified'
 
-REQUEST_TIMEOUT = httpx.Timeout(60.0, connect=10.0)
+# Standby gives an incoming request 5 minutes before it times out. A full list
+# runs in ceil(LIST_MAX / LIST_CONCURRENCY) waves, so the per-request timeout has
+# to leave the whole batch comfortably inside that ceiling: 3 waves x 30s = 90s.
+# A real address answers in about 5 seconds, so 30s is already generous.
+REQUEST_TIMEOUT = httpx.Timeout(30.0, connect=10.0)
 
 # A catch-all domain accepts mail for every address, so a positive result there
 # proves nothing. Disposable and role-based mailboxes are deliverable but are a
@@ -86,6 +90,39 @@ def _shape(item: dict) -> dict:
     }
 
 
+def _billable_count() -> int | None:
+    """How many more addresses this run may bill, or None when nothing caps it.
+
+    A Standby run is long-lived and serves many calls, but the pay-per-event
+    limit (ACTOR_MAX_TOTAL_CHARGE_USD) applies to the *run*, not to the caller.
+    Once it is spent the platform silently stops charging and then aborts the
+    run, so asking first is what keeps this server from verifying addresses —
+    and paying Verimailx for them — without being able to bill for the work.
+    """
+    try:
+        return Actor.get_charging_manager().calculate_max_event_charge_count_within_limit(CHARGE_EVENT)
+    except Exception as exc:  # noqa: BLE001 — no charging context (local run, non-PPE)
+        Actor.log.debug(f'No charging limit available, treating as uncapped: {exc}')
+        return None
+
+
+async def _charge_one() -> bool:
+    """Bill one verified address. False means the run's limit is now spent."""
+    try:
+        result = await Actor.charge(CHARGE_EVENT)
+    except Exception as exc:  # noqa: BLE001 — never fail a verdict the caller already has
+        Actor.log.warning(f'Charging {CHARGE_EVENT} failed: {exc}')
+        return True
+    return not result.event_charge_limit_reached
+
+
+_LIMIT_HELP = (
+    'This run has reached its pay-per-event spending limit, so no further addresses '
+    'can be verified. Raise "Max total charge" for the Actor in Apify Console (or set '
+    'maxTotalChargeUsd on the run) and try again.'
+)
+
+
 async def _post(client: httpx.AsyncClient, url: str, payload: dict) -> dict:
     response = await client.post(
         url,
@@ -114,12 +151,16 @@ def build_server() -> FastMCP:
         result there proves nothing. Use this before adding an address to an
         outreach list or a CRM record.
         """
+        if _billable_count() == 0:
+            raise RuntimeError(_LIMIT_HELP)
+
         async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT) as client:
             payload = await _post(client, VALIDATE_ENDPOINT, {'email': email})
 
         item = payload.get('result') if isinstance(payload.get('result'), dict) else payload
         shaped = _shape(item)
-        await Actor.charge(event_name=CHARGE_EVENT)
+        if not await _charge_one():
+            shaped['notice'] = _LIMIT_HELP
         return shaped
 
     @server.tool()
@@ -146,6 +187,20 @@ def build_server() -> FastMCP:
                 f'{LIST_MAX}. For larger lists use the bulk Actor: {BULK_ACTOR_URL}'
             )
 
+        # Trim to what this run can still bill *before* spending Verimailx credits
+        # on addresses whose verdicts could never be charged for.
+        budget = _billable_count()
+        skipped: list[str] = []
+        if budget is not None and budget < len(deduped):
+            if budget <= 0:
+                raise RuntimeError(_LIMIT_HELP)
+            skipped = deduped[budget:]
+            deduped = deduped[:budget]
+            Actor.log.warning(
+                f'Charge limit allows {budget} more address(es); '
+                f'{len(skipped)} of this call were left unverified.'
+            )
+
         gate = asyncio.Semaphore(LIST_CONCURRENCY)
 
         async def one(client: httpx.AsyncClient, address: str) -> dict:
@@ -167,20 +222,30 @@ def build_server() -> FastMCP:
         # unit, so a run that hits its cap stops cleanly instead of overshooting.
         # Only addresses that reached a verdict are billable.
         verified = [r for r in shaped if not r.get('error')]
+        charged = 0
+        limit_hit = False
         for _ in verified:
-            await Actor.charge(event_name=CHARGE_EVENT)
+            charged += 1
+            if not await _charge_one():
+                limit_hit = True
+                break
 
         summary: dict[str, int] = {}
         for record in shaped:
             summary[record['overall']] = summary.get(record['overall'], 0) + 1
 
-        return {
+        response = {
             'checked': len(shaped),
-            'charged': len(verified),
+            'charged': charged,
             'safe_to_send': sum(1 for r in shaped if r['safe_to_send']),
             'summary': summary,
             'results': shaped,
         }
+        if skipped:
+            response['not_verified'] = skipped
+        if limit_hit or skipped:
+            response['notice'] = _LIMIT_HELP
+        return response
 
     @server.resource(uri='resource://verimailx/info', name='verimailx-info')
     def info() -> str:
@@ -199,6 +264,11 @@ def build_server() -> FastMCP:
 
 async def main() -> None:
     async with Actor:
+        # Fail loudly at startup rather than answering the first tool call with a
+        # configuration error — a Standby instance that cannot verify anything
+        # should not sit there looking healthy.
+        _api_key()
+
         server = build_server()
         app = server.http_app(transport='streamable-http')
 
@@ -209,6 +279,17 @@ async def main() -> None:
         )
         web_server = uvicorn.Server(config)
         server_task = asyncio.create_task(web_server.serve())
+
+        # The platform sends `aborting` and force-stops 30 seconds later — on idle
+        # timeout, on abort, or when the run's charge limit is spent. Letting
+        # uvicorn drain in that window finishes in-flight tool calls instead of
+        # dropping them as a broken connection on the caller's side.
+        async def on_aborting(_event_data: object = None) -> None:
+            Actor.log.info('Shutdown requested — draining in-flight requests.')
+            web_server.should_exit = True
+
+        Actor.on(Event.ABORTING, on_aborting)
+        Actor.on(Event.MIGRATING, on_aborting)
 
         Actor.log.info(f'MCP server ready at {Actor.configuration.web_server_url}/mcp')
 
