@@ -1,0 +1,4 @@
+apify
+fastmcp
+uvicorn
+httpx
