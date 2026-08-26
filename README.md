@@ -67,6 +67,11 @@ The Actor runs in [Standby mode](https://docs.apify.com/platform/actors/developm
 
 Failed lookups are not charged. Apify's platform fee is included in the rate.
 
+If you set a maximum charge for the run, the server checks the remaining budget
+before it verifies anything. Once the budget is spent it says so plainly — it
+will not keep verifying addresses it cannot bill you for, and a partial list
+call tells you exactly which addresses it left unverified.
+
 ---
 
 ## Verifying more than 25 at a time
