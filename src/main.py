@@ -12,6 +12,8 @@ import os
 import httpx
 import uvicorn
 from fastmcp import FastMCP
+from starlette.requests import Request
+from starlette.responses import PlainTextResponse
 
 from apify import Actor, Event
 
@@ -246,6 +248,23 @@ def build_server() -> FastMCP:
         if limit_hit or skipped:
             response['notice'] = _LIMIT_HELP
         return response
+
+    @server.custom_route('/', methods=['GET'])
+    async def readiness(request: Request) -> PlainTextResponse:
+        """Answer the platform's readiness probe.
+
+        Before Standby routes any traffic to this container, Apify sends
+        GET / carrying the x-apify-container-server-readiness-probe header, and
+        a run that does not answer it is never marked ready — it would sit there
+        logging a healthy startup while every MCP request went unserved. The MCP
+        endpoint itself is mounted at /mcp, so without this route that probe gets
+        a 404.
+        """
+        if request.headers.get('x-apify-container-server-readiness-probe'):
+            return PlainTextResponse('ready')
+        return PlainTextResponse(
+            'Verimailx email verification MCP server. Connect an MCP client to /mcp.'
+        )
 
     @server.resource(uri='resource://verimailx/info', name='verimailx-info')
     def info() -> str:
