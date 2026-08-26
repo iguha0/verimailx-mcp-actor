@@ -1,4 +1,7 @@
 apify
-fastmcp
+# Pinned to the 3.x line: FastMCP renames server APIs across major versions, and
+# an unpinned dependency would let a future major break the build without a
+# single line of this Actor's code changing.
+fastmcp>=3.0,<4
 uvicorn
 httpx
