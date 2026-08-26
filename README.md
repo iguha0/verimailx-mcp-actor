@@ -11,7 +11,7 @@ $0.30 per 1,000 addresses verified. No Verimailx account needed — you authenti
 | Tool | What it does |
 |---|---|
 | `verify_email` | Check one address. Returns a verdict, a 0–100 deliverability score, and every individual check. |
-| `verify_email_list` | Check up to 100 addresses in one call. Returns per-address records plus a summary count by verdict. |
+| `verify_email_list` | Check up to 25 addresses in one call. Returns per-address records plus a summary count by verdict. |
 
 Each check runs RFC syntax validation, DNS resolution, MX record inspection and an SMTP handshake, and flags disposable and role-based mailboxes. **No mail is ever sent** — the SMTP handshake asks the receiving server whether a mailbox exists and then disconnects, so nobody on your list is contacted.
 
@@ -69,9 +69,9 @@ Failed lookups are not charged. Apify's platform fee is included in the rate.
 
 ---
 
-## Verifying more than 100 at a time
+## Verifying more than 25 at a time
 
-This server is built for conversational use — an agent checking a handful of addresses inside a task. For list cleaning at scale, use the bulk Actor instead: [Bulk Email Verifier & Validator](https://apify.com/cold_email_master/email-verifier-validator). It takes a link to a CSV, an Apify dataset ID, or a pasted list, and handles tens of thousands of addresses per run at the same price.
+This server is built for conversational use — an agent checking a handful of addresses inside a task. For list cleaning at scale, use the bulk Actor instead: [Bulk Email Verifier & Validator](https://apify.com/cold_email_master/bulk-email-verifier-validator). It takes a link to a CSV, an Apify dataset ID, or a pasted list, and handles tens of thousands of addresses per run at the same price.
 
 ---
 
@@ -90,7 +90,7 @@ A: Catch-all domains — ones configured to accept mail at any address — are r
 A: They are sent to the Verimailx API for verification and are not written to any persistent storage by this Actor.
 
 **Q: Can I use this without an AI agent?**
-A: For scripted use the [REST Actor](https://apify.com/cold_email_master/email-verifier-validator) is a better fit — MCP is designed for tool-calling clients.
+A: For scripted use the [REST Actor](https://apify.com/cold_email_master/bulk-email-verifier-validator) is a better fit — MCP is designed for tool-calling clients.
 
 ---
 
