@@ -5,6 +5,8 @@
     "description": "MCP server that lets AI agents verify email addresses. Syntax, DNS, MX and SMTP checks with disposable and role-based detection, no mail sent. Works in Claude, Cursor and any MCP client.",
     "version": "0.0",
     "buildTag": "latest",
+    "minMemoryMbytes": 256,
+    "maxMemoryMbytes": 1024,
     "usesStandbyMode": true,
     "webServerMcpPath": "/mcp",
     "meta": {
