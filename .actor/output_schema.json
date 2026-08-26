@@ -1,0 +1,7 @@
+{
+    "actorOutputSchemaVersion": 1,
+    "title": "Email Verifier MCP Server output",
+    "description": "This Actor is an MCP server, not a batch job. Results are returned in the response to each MCP tool call, so a run writes nothing to a dataset or key-value store and the Console shows the Log tab rather than an empty Output tab. For bulk verification that does produce a dataset, use the Bulk Email Verifier & Validator Actor.",
+    "type": "object",
+    "properties": {}
+}

@@ -13,6 +13,7 @@
         "template": "python-mcp-empty"
     },
     "input": "./INPUT_SCHEMA.json",
+    "output": "./output_schema.json",
     "dockerfile": "../Dockerfile",
     "readme": "../README.md"
 }
