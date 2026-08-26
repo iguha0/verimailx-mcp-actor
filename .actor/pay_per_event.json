@@ -1,0 +1,7 @@
+{
+    "email-verified": {
+        "eventTitle": "Email Verified",
+        "eventDescription": "Charged once for each email address checked to a final verdict.",
+        "eventPriceUsd": 0.0003
+    }
+}

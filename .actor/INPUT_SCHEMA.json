@@ -1,0 +1,8 @@
+{
+    "title": "Email Verifier MCP Server",
+    "description": "This Actor runs as an MCP server — you don't start it with input. Connect an MCP client to its URL and call the tools instead. See the README for the client configuration.",
+    "type": "object",
+    "schemaVersion": 1,
+    "properties": {},
+    "required": []
+}
