@@ -1,6 +1,6 @@
 {
     "actorSpecification": 1,
-    "name": "verimailx-email-mcp",
+    "name": "email-verifier-mcp-server",
     "title": "Email Verifier MCP Server | Verify Emails in Claude | $0.30/1k",
     "description": "MCP server that lets AI agents verify email addresses. Syntax, DNS, MX and SMTP checks with disposable and role-based detection, no mail sent. Works in Claude, Cursor and any MCP client.",
     "version": "0.0",
