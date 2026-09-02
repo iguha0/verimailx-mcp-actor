@@ -15,7 +15,7 @@ $0.30 per 1,000 addresses verified. No Verimailx account needed — you authenti
 
 Each check runs RFC syntax validation, DNS resolution, MX record inspection and an SMTP handshake, and flags disposable and role-based mailboxes. **No mail is ever sent** — the SMTP handshake asks the receiving server whether a mailbox exists and then disconnects, so nobody on your list is contacted.
 
-Verdicts are `valid` (safe to send), `invalid` (will bounce), `risky` (disposable, role-based, or a catch-all domain) and `unknown` (server timeout or ambiguous response).
+Verdicts are `valid` (safe to send), `invalid` (will bounce), `risky` (disposable, role-based, or a catch-all address that could not be resolved) and `unknown` (server timeout or ambiguous response).
 
 ---
 
@@ -29,7 +29,7 @@ Add this to your MCP configuration, using an [Apify API token](https://console.a
 {
   "mcpServers": {
     "verimailx": {
-      "url": "https://cold-email-master--verimailx-email-mcp.apify.actor/mcp",
+      "url": "https://cold-email-master--email-verifier-mcp-server.apify.actor/mcp",
       "headers": {
         "Authorization": "Bearer <YOUR_APIFY_API_TOKEN>"
       }
@@ -88,8 +88,8 @@ A: No. The Actor carries the Verimailx credentials; you authenticate with your A
 **Q: Does this send email to the addresses I check?**
 A: No. Verification stops at the SMTP handshake. No message is delivered and the recipient sees nothing.
 
-**Q: How accurate is catch-all detection?**
-A: Catch-all domains — ones configured to accept mail at any address — are reported as `risky` rather than `valid`, because an individual mailbox behind a catch-all cannot be confirmed. Treating them as valid is the most common cause of bounces on a "clean" list.
+**Q: Do you verify addresses on catch-all domains?**
+A: Yes. A catch-all domain accepts mail at any address, which is why most verifiers label the whole domain risky and leave you guessing on every address behind it. Verimailx resolves the individual mailbox, so a real address on a catch-all domain returns `valid` and a fake one returns `invalid`. The rare address that still can't be resolved returns `risky` with `catch_all` true, so you can always tell the two apart.
 
 **Q: What happens to the addresses I check?**
 A: They are sent to the Verimailx API for verification and are not written to any persistent storage by this Actor.
@@ -108,6 +108,10 @@ A: For scripted use the [REST Actor](https://apify.com/cold_email_master/bulk-em
 ---
 
 ## Changelog
+
+### 0.0.2 — Catch-all resolution, and a corrected connection URL
+- Mailboxes behind catch-all domains are resolved individually, so a real address on a catch-all domain now returns `valid` rather than being written off as `risky`. `catch_all` is true only when one could not be resolved.
+- **The connection URL in this README was wrong** — it named a slug this Actor has never been published under, so anyone who copied it got a host that does not resolve. Corrected to the real Standby hostname.
 
 ### 0.0.1 — Initial release
 - `verify_email` and `verify_email_list` tools over Streamable HTTP, served through Actor Standby.
