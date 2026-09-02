@@ -46,11 +46,11 @@ CHARGE_EVENT = 'email-verified'
 # A real address answers in about 5 seconds, so 30s is already generous.
 REQUEST_TIMEOUT = httpx.Timeout(30.0, connect=10.0)
 
-# The service resolves mailboxes behind catch-all domains directly, so a catch-all
-# address normally arrives already judged valid or invalid and never lands here. A
-# residual 'catch_all' means this particular one could not be resolved, which is
-# still risky. Disposable and role-based mailboxes are deliverable but a bad idea
-# to send to.
+# The service resolves mailboxes behind B2B catch-all domains directly, so such an
+# address normally arrives already judged valid or invalid and never lands here.
+# Consumer (B2C) catch-alls are out of scope and do still land here. A residual
+# 'catch_all' means this one could not be resolved, which is still risky.
+# Disposable and role-based mailboxes are deliverable but a bad idea to send to.
 _RISKY = {'risky', 'catch_all', 'catch-all', 'catchall', 'disposable', 'role', 'role_based'}
 
 
@@ -154,11 +154,13 @@ def build_server() -> FastMCP:
 
         Returns safe_to_send, an overall verdict of valid, invalid, risky or
         unknown, a deliverability score from 0 to 100, and the individual check
-        results. Addresses on catch-all domains are resolved individually rather
-        than written off, so a real mailbox on a catch-all domain comes back valid
-        and a fake one invalid; catch_all is true only when one could not be
-        resolved. Disposable and role-based mailboxes are reported as risky. Use
-        this before adding an address to an outreach list or a CRM record.
+        results. Addresses on B2B catch-all domains are resolved individually
+        rather than written off, so a real mailbox on one comes back valid and a
+        fake one invalid. Consumer (B2C) catch-alls are not in scope: those, and
+        anything else that could not be resolved, come back risky with catch_all
+        true — so treat catch_all as "unverified", never as a verdict. Disposable
+        and role-based mailboxes are reported as risky. Use this before adding an
+        address to an outreach list or a CRM record.
         """
         if _billable_count() == 0:
             raise RuntimeError(_LIMIT_HELP)
@@ -280,8 +282,9 @@ def build_server() -> FastMCP:
             'Verimailx email verification. verify_email checks one address; '
             f'verify_email_list checks up to {LIST_MAX} at once. Each check runs RFC '
             'syntax, DNS, MX and SMTP-handshake validation and flags disposable and '
-            'role-based mailboxes, without sending any mail. Mailboxes behind catch-all '
-            'domains are resolved individually rather than written off as risky. '
+            'role-based mailboxes, without sending any mail. Mailboxes behind B2B '
+            'catch-all domains are resolved individually rather than written off as '
+            'risky; consumer (B2C) catch-alls are out of scope and stay risky. '
             f'Billed per address verified. For larger lists use {BULK_ACTOR_URL}.'
         )
 
