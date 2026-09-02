@@ -2,8 +2,12 @@
 
 The Actor runs a FastMCP server on the platform's web server port. With Standby
 enabled, Apify keeps an instance warm and routes MCP requests to it, so any MCP
-client (Claude, Cursor, an agent framework) can call the tools below at
-    https://cold-email-master--verimailx-email-mcp.apify.actor/mcp
+client (Claude, Cursor, an agent framework) can call the tools below at the
+Actor's Standby hostname, shown in the Standby tab of the Actor detail page:
+    https://cold-email-master--email-verifier-mcp-server.apify.actor/mcp
+
+Standby must be switched on in Settings -> Actor Standby; without it the Actor
+has no permanent hostname and only a running instance's own run URL works.
 """
 
 import asyncio
@@ -42,9 +46,11 @@ CHARGE_EVENT = 'email-verified'
 # A real address answers in about 5 seconds, so 30s is already generous.
 REQUEST_TIMEOUT = httpx.Timeout(30.0, connect=10.0)
 
-# A catch-all domain accepts mail for every address, so a positive result there
-# proves nothing. Disposable and role-based mailboxes are deliverable but are a
-# bad idea to send to. All three are reported as risky rather than valid.
+# The service resolves mailboxes behind catch-all domains directly, so a catch-all
+# address normally arrives already judged valid or invalid and never lands here. A
+# residual 'catch_all' means this particular one could not be resolved, which is
+# still risky. Disposable and role-based mailboxes are deliverable but a bad idea
+# to send to.
 _RISKY = {'risky', 'catch_all', 'catch-all', 'catchall', 'disposable', 'role', 'role_based'}
 
 
@@ -148,10 +154,11 @@ def build_server() -> FastMCP:
 
         Returns safe_to_send, an overall verdict of valid, invalid, risky or
         unknown, a deliverability score from 0 to 100, and the individual check
-        results. Catch-all, disposable and role-based addresses are reported as
-        risky, not valid — a catch-all domain accepts everything, so a positive
-        result there proves nothing. Use this before adding an address to an
-        outreach list or a CRM record.
+        results. Addresses on catch-all domains are resolved individually rather
+        than written off, so a real mailbox on a catch-all domain comes back valid
+        and a fake one invalid; catch_all is true only when one could not be
+        resolved. Disposable and role-based mailboxes are reported as risky. Use
+        this before adding an address to an outreach list or a CRM record.
         """
         if _billable_count() == 0:
             raise RuntimeError(_LIMIT_HELP)
@@ -272,9 +279,9 @@ def build_server() -> FastMCP:
         return (
             'Verimailx email verification. verify_email checks one address; '
             f'verify_email_list checks up to {LIST_MAX} at once. Each check runs RFC '
-            'syntax, DNS, MX and SMTP-handshake validation and flags catch-all, '
-            'disposable and role-based mailboxes, without sending any mail. Catch-all, '
-            'disposable and role-based results are reported as risky rather than valid. '
+            'syntax, DNS, MX and SMTP-handshake validation and flags disposable and '
+            'role-based mailboxes, without sending any mail. Mailboxes behind catch-all '
+            'domains are resolved individually rather than written off as risky. '
             f'Billed per address verified. For larger lists use {BULK_ACTOR_URL}.'
         )
 
