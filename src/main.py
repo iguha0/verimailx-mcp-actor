@@ -104,7 +104,8 @@ def _shape(item: dict) -> dict:
 _PLAN_REQUIRED = (
     'This MCP server is available to users on a paid Apify plan. Nothing was verified '
     'and nothing was charged. For free verification with the same checks, up to 50 '
-    f'addresses per run, use {FREE_ACTOR_URL}.'
+    f'addresses per run, use {FREE_ACTOR_URL}. On a paid plan and seeing this? Report it '
+    'through the Actor Issues tab.'
 )
 
 
@@ -131,13 +132,17 @@ def _is_free_plan_caller() -> bool:
     A Standby run is not shared between users (each caller gets their own run), so
     this environment variable describes the caller, not the developer.
 
-    Deliberately fails OPEN. APIFY_USER_IS_PAYING is documented only as "1 means
-    paying"; it is not promised to be present, nor to be "0" otherwise. Treating a
-    missing value as "not paying" would turn a platform change into an outage for
-    paying customers, which costs far more than an occasional free call getting
-    through.
+    Fails CLOSED: on the platform, only an explicit "1" is served. Apify's docs
+    name this variable as THE way an Actor learns the caller's plan — under
+    limited permissions /users/me is blocked — so its absence is a fault worth
+    refusing over, not a hint to ignore. The failure modes are not symmetric: a
+    wrongly refused paying caller reads the message and complains, while a
+    wrongly served free call is silent and just costs money.
     """
-    return _plan_flag_state() in ('not-paying',)
+    # Off the platform (local run, tests) there is no caller to check.
+    if os.environ.get('APIFY_IS_AT_HOME') != '1':
+        return False
+    return os.environ.get('APIFY_USER_IS_PAYING') != '1'
 
 
 def _require_paid_plan() -> None:
@@ -150,10 +155,9 @@ def _require_paid_plan() -> None:
 def _log_plan_flag() -> None:
     """Record what the platform actually said about the caller's plan.
 
-    The gate fails open on a missing flag, and failing open is silent — which makes
-    "the gate ran and let a paying customer through" indistinguishable from "Apify
-    stopped setting the variable, so the gate is now a no-op". Grep a run log for
-    `plan-flag=` to tell them apart.
+    The gate refuses anything but an explicit "1", so if the platform ever stops
+    setting the variable this line is what explains a wave of turned-away callers.
+    Grep a run log for `plan-flag=` to see the raw value.
     """
     state = _plan_flag_state()
     detail = (
@@ -163,7 +167,7 @@ def _log_plan_flag() -> None:
         f' origin={os.environ.get("APIFY_META_ORIGIN", "unknown")}'
     )
     if state in ('absent', 'empty') and os.environ.get('APIFY_IS_AT_HOME') == '1':
-        Actor.log.warning(f"Apify did not report the caller's plan — allowing the run. {detail}")
+        Actor.log.warning(f"Apify did not report the caller's plan — refusing calls. {detail}")
     else:
         Actor.log.info(detail)
 
