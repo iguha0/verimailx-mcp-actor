@@ -2,7 +2,7 @@
     "actorSpecification": 1,
     "name": "email-verifier-mcp-server",
     "title": "Email Verifier MCP Server | Verify Emails in Claude | $0.30/1k",
-    "description": "MCP server that lets AI agents verify email addresses. Syntax, DNS, MX and SMTP checks with disposable and role-based detection, no mail sent. Works in Claude, Cursor and any MCP client.",
+    "description": "MCP server that lets AI agents verify email addresses. Resolves B2B catch-all mailboxes; syntax, DNS, MX and SMTP checks, no mail sent. Works in Claude, Cursor and any MCP client. Paid Apify plan required — free plans use the free Actor.",
     "version": "0.0",
     "buildTag": "latest",
     "minMemoryMbytes": 256,
