@@ -23,6 +23,9 @@ from apify import Actor, Event
 
 BULK_ACTOR_URL = 'apify.com/cold_email_master/bulk-email-verifier-validator'
 
+# Where free-plan callers are sent instead.
+FREE_ACTOR_URL = 'apify.com/cold_email_master/free-email-verifier'
+
 # Verimailx REST API. The key is supplied by the Actor's environment, so callers
 # authenticate with their Apify token and never need a Verimailx account.
 API_KEY_ENV = 'APIFY-VERIMAILX-API-KEY'
@@ -98,6 +101,73 @@ def _shape(item: dict) -> dict:
     }
 
 
+_PLAN_REQUIRED = (
+    'This MCP server is available to users on a paid Apify plan. Nothing was verified '
+    'and nothing was charged. For free verification with the same checks, up to 50 '
+    f'addresses per run, use {FREE_ACTOR_URL}.'
+)
+
+
+def _plan_flag_state() -> str:
+    """Classify APIFY_USER_IS_PAYING without deciding anything — for the log line."""
+    flag = os.environ.get('APIFY_USER_IS_PAYING')
+    if flag is None:
+        return 'absent'
+    if flag == '':
+        return 'empty'
+    if flag == '1':
+        return 'paying'
+    return 'not-paying'
+
+
+def _is_free_plan_caller() -> bool:
+    """True only when the platform positively says this caller is not on a paid plan.
+
+    Apify pays the developer only for runs started by users on a PAID plan, while a
+    free-plan call still spends Verimailx credits and platform compute — so serving
+    one here is verification given away at a loss. The free Actor exists for exactly
+    that audience.
+
+    A Standby run is not shared between users (each caller gets their own run), so
+    this environment variable describes the caller, not the developer.
+
+    Deliberately fails OPEN. APIFY_USER_IS_PAYING is documented only as "1 means
+    paying"; it is not promised to be present, nor to be "0" otherwise. Treating a
+    missing value as "not paying" would turn a platform change into an outage for
+    paying customers, which costs far more than an occasional free call getting
+    through.
+    """
+    return _plan_flag_state() in ('not-paying',)
+
+
+def _require_paid_plan() -> None:
+    """Refuse a free-plan caller before any address is verified or charged."""
+    if _is_free_plan_caller():
+        Actor.log.warning(f'Refused a free-plan caller. {_PLAN_REQUIRED}')
+        raise RuntimeError(_PLAN_REQUIRED)
+
+
+def _log_plan_flag() -> None:
+    """Record what the platform actually said about the caller's plan.
+
+    The gate fails open on a missing flag, and failing open is silent — which makes
+    "the gate ran and let a paying customer through" indistinguishable from "Apify
+    stopped setting the variable, so the gate is now a no-op". Grep a run log for
+    `plan-flag=` to tell them apart.
+    """
+    state = _plan_flag_state()
+    detail = (
+        f'plan-flag={state}'
+        f' raw={os.environ.get("APIFY_USER_IS_PAYING")!r}'
+        f' user={os.environ.get("APIFY_USER_ID", "unknown")}'
+        f' origin={os.environ.get("APIFY_META_ORIGIN", "unknown")}'
+    )
+    if state in ('absent', 'empty') and os.environ.get('APIFY_IS_AT_HOME') == '1':
+        Actor.log.warning(f"Apify did not report the caller's plan — allowing the run. {detail}")
+    else:
+        Actor.log.info(detail)
+
+
 def _billable_count() -> int | None:
     """How many more addresses this run may bill, or None when nothing caps it.
 
@@ -162,6 +232,8 @@ def build_server() -> FastMCP:
         and role-based mailboxes are reported as risky. Use this before adding an
         address to an outreach list or a CRM record.
         """
+        _require_paid_plan()
+
         if _billable_count() == 0:
             raise RuntimeError(_LIMIT_HELP)
 
@@ -188,6 +260,8 @@ def build_server() -> FastMCP:
         many addresses are safe to send to. An address that could not be checked
         comes back with an "error" field instead of a verdict and is not charged.
         """
+        _require_paid_plan()
+
         deduped = list(dict.fromkeys(e.strip().lower() for e in emails if e and e.strip()))
 
         if not deduped:
@@ -293,6 +367,8 @@ def build_server() -> FastMCP:
 
 async def main() -> None:
     async with Actor:
+        _log_plan_flag()
+
         # Fail loudly at startup rather than answering the first tool call with a
         # configuration error — a Standby instance that cannot verify anything
         # should not sit there looking healthy.
