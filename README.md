@@ -4,6 +4,8 @@
 
 $0.30 per 1,000 addresses verified. No Verimailx account needed — you authenticate with your Apify token.
 
+> **Requires a paid Apify plan.** A call from a free-plan account returns a message and verifies nothing — nothing is charged either. For free verification with the same checks, use the [Free Email Verifier](https://apify.com/cold_email_master/free-email-verifier) (50 addresses per run).
+
 ---
 
 ## What your agent can do
@@ -67,6 +69,13 @@ The Actor runs in [Standby mode](https://docs.apify.com/platform/actors/developm
 
 Failed lookups are not charged. Apify's platform fee is included in the rate.
 
+### Plan requirement
+
+This server is available to accounts on a **paid Apify plan**. A tool call from a
+free-plan account comes back with a message instead of a verdict; no address is
+verified and nothing is charged. The [Free Email Verifier](https://apify.com/cold_email_master/free-email-verifier)
+runs the same checks on up to 50 addresses per run at no cost.
+
 If you set a maximum charge for the run, the server checks the remaining budget
 before it verifies anything. Once the budget is spent it says so plainly — it
 will not keep verifying addresses it cannot bill you for, and a partial list
@@ -108,6 +117,10 @@ A: For scripted use the [REST Actor](https://apify.com/cold_email_master/bulk-em
 ---
 
 ## Changelog
+
+### 0.0.3 — Paid plan required
+- Tool calls from free-plan accounts now return a message pointing at the free Actor instead of verifying. Nothing is verified and nothing is charged, so a free-plan call costs neither side anything.
+- Every run logs the plan the platform reported for the caller, so a gate that stops working is visible rather than silent.
 
 ### 0.0.2 — Catch-all resolution, and a corrected connection URL
 - Mailboxes behind **B2B** catch-all domains are resolved individually, so a real address on one now returns `valid` rather than being written off as `risky`. Consumer (B2C) catch-alls remain out of scope; `catch_all` is true for anything that could not be resolved.
